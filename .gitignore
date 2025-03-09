@@ -1,0 +1,11 @@
+# 忽略 processed_dataset 文件夹
+processed_dataset/
+dataset/
+
+# 忽略所有根目录和子目录中的 __pycache__ 文件夹
+**/__pycache__/
+
+# 忽略所有根目录和子目录中的 .pyc 文件
+**/*.pyc
+
+**/*.DS_Store

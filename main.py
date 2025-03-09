@@ -19,7 +19,7 @@ if os.path.exists(save_path):
     dataset = load_processed_dataset(save_path)
     print("✅ 已加载已处理数据集，增量更新...")
 else:
-    dataset = load_dataset("json", data_files="complex_images.json", split="train")
+    dataset = load_dataset("json", data_files="dataset/complex_images.json", split="train")
 
 # ✅ 3. 增量处理 `map()`，每 `5000` 张图片存储一次
 dataset = process_dataset(dataset, processors, save_path, batch_size=3)
