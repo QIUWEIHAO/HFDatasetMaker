@@ -1,5 +1,5 @@
 import torchvision.transforms as transforms
-
+    
 resize_resolution = 512
 # ✅ 定义 `resize` 处理 pipeline
 transform = transforms.Compose([

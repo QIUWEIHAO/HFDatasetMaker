@@ -6,7 +6,7 @@ from io import BytesIO
 from PIL import Image as PILImage
 
 # ✅ 加载数据集
-dataset = load_from_disk("processed_dataset")
+dataset = load_from_disk("processed_dataset_3")
 df = dataset.to_pandas()
 
 # ✅ 直接解码 `datasets.Image`
@@ -20,6 +20,7 @@ def decode_image(image_data):
         return None  # 遇到错误时返回 `None`
 
 df["image"] = df["image"].apply(decode_image)  # ✅ 直接替代原 `image` 列
+# df["image"] = df["deepgaze_feature"].apply(decode_image)  # ✅ 直接替代原 `image` 列
 
 # ✅ 让 `image` 在 `st.markdown()` 里显示 HTML `<img>`
 def image_to_html(img, index):
