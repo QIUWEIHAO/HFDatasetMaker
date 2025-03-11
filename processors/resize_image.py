@@ -1,18 +1,21 @@
-import torchvision.transforms as transforms
+from PIL import Image
+
+def resize_max(image, max_width, max_height):
+    # 获取原始尺寸
+    orig_width, orig_height = image.size
     
-resize_resolution = 512
-# ✅ 定义 `resize` 处理 pipeline
-transform = transforms.Compose([
-    transforms.Resize(resize_resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-    transforms.Pad(
-        padding=(0, (resize_resolution - int(resize_resolution * (300 / 700))) // 2, 0, 
-                    (resize_resolution - int(resize_resolution * (300 / 700)) + 1) // 2),
-        fill=(255, 0, 255)  # 用品紅色填充
-    ),
-    transforms.Resize((resize_resolution, resize_resolution), interpolation=transforms.InterpolationMode.BILINEAR),
-    transforms.ToTensor(),
-])
-def resize_image(batch):
-    """ ✅ 使用 `torchvision.transforms` 进行 `resize` """
-    batch["image"] = [transform(img) for img in batch["image"]]
+    # 计算缩放比例
+    scale_w = max_width / orig_width
+    scale_h = max_height / orig_height
+    scale = min(scale_w, scale_h)  # 确保不会超过 1920x1080
+    
+    # 计算新尺寸，确保一边等于 1920 或 1080
+    new_width = int(orig_width * scale)
+    new_height = int(orig_height * scale)
+
+    # 使用高质量缩放
+    return image.resize((new_width, new_height), Image.LANCZOS)
+
+def resize_image(batch, input_key, output_key, max_dims=(1920, 1080)):
+    batch[output_key] = [resize_max(img, max_width=max_dims[0], max_height= max_dims[1]) for img in batch[input_key]]
     return batch
