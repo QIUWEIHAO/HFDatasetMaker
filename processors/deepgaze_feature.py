@@ -112,39 +112,39 @@ def deepgaze_process(batch, input_key, output_key, num_points=4, batch_random_si
     return batch
 
 
-#
-def process_image_with_deepgaze(image, num_points, num_iterations):
-    image_np = np.array(image) 
-    image_height, image_width = image_np.shape[:2]
-    # rescale to match image size
-    centerbias = zoom(centerbias_template, (image_height/centerbias_template.shape[0], image_width/centerbias_template.shape[1]), order=0, mode='nearest')
-    # renormalize log density
-    centerbias -= logsumexp(centerbias)
+# # Shaw's original code
+# def process_image_with_deepgaze(image, num_points, num_iterations):
+#     image_np = np.array(image) 
+#     image_height, image_width = image_np.shape[:2]
+#     # rescale to match image size
+#     centerbias = zoom(centerbias_template, (image_height/centerbias_template.shape[0], image_width/centerbias_template.shape[1]), order=0, mode='nearest')
+#     # renormalize log density
+#     centerbias -= logsumexp(centerbias)
     
-    centerbias = np.zeros([image_np.shape[0], image_np.shape[1]])
-    centerbias_tensor = torch.tensor([centerbias], device=device)  # (batch, H, W)
+#     centerbias = np.zeros([image_np.shape[0], image_np.shape[1]])
+#     centerbias_tensor = torch.tensor([centerbias], device=device)  # (batch, H, W)
     
-    heatmaps= []
+#     heatmaps= []
     
-    for _ in range(num_iterations):
-        # Generate random fixation points that cover the entire image
-        points = [(np.random.randint(0, image_width), np.random.randint(0, image_height)) for _ in range(num_points)]
+#     for _ in range(num_iterations):
+#         # Generate random fixation points that cover the entire image
+#         points = [(np.random.randint(0, image_width), np.random.randint(0, image_height)) for _ in range(num_points)]
 
-        # Extract x and y coordinates of the fixation points
-        fixation_history_x = np.array([p[0] for p in points])
-        fixation_history_y = np.array([p[1] for p in points])
+#         # Extract x and y coordinates of the fixation points
+#         fixation_history_x = np.array([p[0] for p in points])
+#         fixation_history_y = np.array([p[1] for p in points])
 
-        # Convert the inputs to tensors
-        image_tensor = torch.tensor([image_np.transpose(2, 0, 1)]).float().to(device)
-        centerbias_tensor = torch.tensor([centerbias]).float().to(device)
-        x_hist_tensor = torch.tensor([fixation_history_x]).float().to(device)
-        y_hist_tensor = torch.tensor([fixation_history_y]).float().to(device)
+#         # Convert the inputs to tensors
+#         image_tensor = torch.tensor([image_np.transpose(2, 0, 1)]).float().to(device)
+#         centerbias_tensor = torch.tensor([centerbias]).float().to(device)
+#         x_hist_tensor = torch.tensor([fixation_history_x]).float().to(device)
+#         y_hist_tensor = torch.tensor([fixation_history_y]).float().to(device)
 
-        # Generate the log density prediction
-        log_density_prediction = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)
-        predicted_heatmap = log_density_prediction.detach().cpu().numpy()[0, 0]
-        heatmaps.append(predicted_heatmap)
+#         # Generate the log density prediction
+#         log_density_prediction = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)
+#         predicted_heatmap = log_density_prediction.detach().cpu().numpy()[0, 0]
+#         heatmaps.append(predicted_heatmap)
 
-    # Average the heatmaps to reduce the influence of individual fixation points
-    final_heatmap = np.mean(heatmaps, axis=0)
-    return final_heatmap
+#     # Average the heatmaps to reduce the influence of individual fixation points
+#     final_heatmap = np.mean(heatmaps, axis=0)
+#     return final_heatmap
