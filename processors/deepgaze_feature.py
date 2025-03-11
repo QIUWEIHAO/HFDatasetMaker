@@ -91,7 +91,7 @@ def process_image_with_deepgaze_batch(image, num_points, batch_size, total_itera
     batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)  # (total_iterations, H, W)
     print(batch_heatmaps.shape)
 
-    final_heatmap = np.multiply(batch_heatmaps, axis=0)  # 形状: (H, W)
+    final_heatmap = np.mean(batch_heatmaps, axis=0)  # 形状: (H, W)
     print(final_heatmap.shape)
 
     # 归一化 heatmap 到 [0, 255]
