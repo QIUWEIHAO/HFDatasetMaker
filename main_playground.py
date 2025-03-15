@@ -61,7 +61,7 @@ dataset = dataset.map(
 
 print("✅running deepgaze_feature")
 dataset = dataset.map(
-    lambda batch: deepgaze_process(batch, input_key="image_resized", output_key="deepgaze_feature", num_points=4, batch_random_size=1, total_iterations=10),
+    lambda batch: deepgaze_process(batch, input_key="image_original", output_key="deepgaze_feature", num_points=4, batch_random_size=1, total_iterations=10),
     batched=True,
     batch_size=1,
     num_proc= 1,
@@ -75,5 +75,6 @@ for image_column in image_columns:
         continue
     print(f"✅ Cast {image_column} to Image")
     dataset = dataset.cast_column(image_column, Image())
+dataset.save_to_disk(dataset_path)
 
 upload_to_huggingface(dataset, HF_USERNAME, HF_REPO_NAME, HF_TOKEN)

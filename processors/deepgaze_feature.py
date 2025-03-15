@@ -1,19 +1,18 @@
-import os
 import torch
 from PIL import Image as PILImage
 from datasets import Image as HFImage
 import deepgaze_pytorch
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
 import numpy as np
 import matplotlib.cm as cm
 from scipy.ndimage import zoom
 from scipy.special import logsumexp
 import matplotlib.pyplot as plt
 
-centerbias_template = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
 
+centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
+centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
 
 def apply_colormap(image_array, colormap="jet"):
     """
@@ -46,7 +45,7 @@ def normalize_image_array_8bit(image):
     normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
     return normalized_image
 
-def process_image_with_deepgaze_batch(image, num_points, batch_size, total_iterations):
+def process_image_with_deepgaze_batch(model,centerbias_template, image, num_points, batch_size, total_iterations):
     image_np = np.array(image)  # ✅ 确保 `numpy` 数据类型正确
     print(image_np.shape)
     H, W = image_np.shape[:2]  # 取得图片高宽
@@ -98,11 +97,14 @@ def process_image_with_deepgaze_batch(image, num_points, batch_size, total_itera
     # final_heatmap = (255 * (final_heatmap - np.min(final_heatmap)) / (np.max(final_heatmap) - np.min(final_heatmap))).astype(np.uint8)
     return final_heatmap
 
-def deepgaze_process(batch, input_key, output_key, num_points=4, batch_random_size = 1, total_iterations=10):    
+def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"}):
     result = []
     for image in batch[input_key]:  
-        print("enter batch")      
-        heatmap = process_image_with_deepgaze_batch(image, num_points, batch_random_size, total_iterations)
+        print("enter batch")
+        centerbias_template = centerbias_template_zeros if params["centerbias"] == "zeros" else centerbias_template_original
+        print("centerbias_template")
+        print(centerbias_template)
+        heatmap = process_image_with_deepgaze_batch(deepgaze_model, centerbias_template, image, params["num_points"], params["batch_random_size"], params["total_iterations"])
         print(type(heatmap))
         
         heatmap_image = apply_colormap(heatmap)
