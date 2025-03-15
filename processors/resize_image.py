@@ -16,6 +16,7 @@ def resize_max(image, max_width, max_height):
     # 使用高质量缩放
     return image.resize((new_width, new_height), Image.LANCZOS)
 
-def resize_image(batch, input_key, output_key, max_dims=(1920, 1080)):
+def resize_image(batch, input_key, output_key, params={"max_dims": [1920, 1080]}):
+    max_dims = params["max_dims"]
     batch[output_key] = [resize_max(img, max_width=max_dims[0], max_height= max_dims[1]) for img in batch[input_key]]
     return batch

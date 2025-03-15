@@ -1,6 +1,7 @@
-from datasets import load_from_disk, Dataset, Image
+import argparse
 from huggingface_hub import HfApi
 import os
+from datasets import load_from_disk
 
 def load_local_dataset(dataset_path: str):
     """
@@ -48,3 +49,23 @@ def upload_to_huggingface(dataset, hf_username: str, hf_repo_name: str, hf_token
     print("🚀 开始同步数据到 Hugging Face Hub...")
     dataset.push_to_hub(hf_dataset_repo, token=hf_token)
     print(f"✅ 数据集已成功上传至: https://huggingface.co/datasets/{hf_dataset_repo}")
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Upload dataset to Hugging Face Hub.")
+    parser.add_argument("--dataset-dir", type=str, required=True, help="Path to the dataset directory")
+    parser.add_argument("--repo-name", type=str, required=True, help="Hugging Face repository name")
+    parser.add_argument("--hf-token", type=str, default=os.getenv("HF_TOKEN"), help="Hugging Face API Token")
+    parser.add_argument("--hf-username", type=str, default="qiuweihao", help="Hugging Face username")
+
+    args = parser.parse_args()
+
+    if not args.hf_token:
+        raise ValueError("❌ Hugging Face Token 未提供，请使用 --hf-token 或设置环境变量 `HF_TOKEN`")
+
+    dataset = load_local_dataset(args.dataset_dir)
+    upload_to_huggingface(dataset, args.hf_username, args.repo_name, args.hf_token)
+
+if __name__ == "__main__":
+    main()
