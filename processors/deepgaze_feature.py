@@ -1,117 +1,294 @@
-import torch
-from PIL import Image as PILImage
-from datasets import Image as HFImage
-import deepgaze_pytorch
-import numpy as np
-import matplotlib.cm as cm
-from scipy.ndimage import zoom
-from scipy.special import logsumexp
-import matplotlib.pyplot as plt
+# import torch
+# from PIL import Image as PILImage
+# from datasets import Image as HFImage
+# import deepgaze_pytorch
+# import numpy as np
+# import matplotlib.cm as cm
+# from scipy.ndimage import zoom
+# from scipy.special import logsumexp
+# import matplotlib.pyplot as plt
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
 
-centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
-centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
+# centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
+# centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
 
-def apply_colormap(image_array, colormap="jet"):
-    """
-    Converts a grayscale NumPy array into a colored image using a colormap.
+# def apply_colormap(image_array, colormap="jet"):
+#     """
+#     Converts a grayscale NumPy array into a colored image using a colormap.
 
-    Args:
-        image_array (np.ndarray): Input grayscale image (H, W) or (H, W, 1)
-        colormap (str): Colormap name (e.g., "jet", "viridis", "magma")
+#     Args:
+#         image_array (np.ndarray): Input grayscale image (H, W) or (H, W, 1)
+#         colormap (str): Colormap name (e.g., "jet", "viridis", "magma")
 
-    Returns:
-        PIL.Image: Colormapped image
-    """
-    if len(image_array.shape) == 3 and image_array.shape[2] == 1:
-        image_array = image_array.squeeze()  # Convert (H, W, 1) -> (H, W)
+#     Returns:
+#         PIL.Image: Colormapped image
+#     """
+#     if len(image_array.shape) == 3 and image_array.shape[2] == 1:
+#         image_array = image_array.squeeze()  # Convert (H, W, 1) -> (H, W)
     
-    # Normalize to [0,1] if not already
-    normalized = (image_array - image_array.min()) / (image_array.max() - image_array.min())
+#     # Normalize to [0,1] if not already
+#     normalized = (image_array - image_array.min()) / (image_array.max() - image_array.min())
     
-    # Apply the colormap
-    colormap_function = cm.get_cmap(colormap)
-    colored_image = colormap_function(normalized)  # (H, W, 4) -> RGBA
+#     # Apply the colormap
+#     colormap_function = cm.get_cmap(colormap)
+#     colored_image = colormap_function(normalized)  # (H, W, 4) -> RGBA
     
-    # Convert to uint8 and remove the alpha channel
-    colored_image = (colored_image[:, :, :3] * 255).astype(np.uint8)  # RGB format
+#     # Convert to uint8 and remove the alpha channel
+#     colored_image = (colored_image[:, :, :3] * 255).astype(np.uint8)  # RGB format
     
-    # Convert to PIL image
-    return PILImage.fromarray(colored_image)
+#     # Convert to PIL image
+#     return PILImage.fromarray(colored_image)
 
-def normalize_image_array_8bit(image):
-    normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
-    return normalized_image
+# def normalize_image_array_8bit(image):
+#     normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
+#     return normalized_image
 
-def process_image_with_deepgaze_batch(model,centerbias_template, image, num_points, batch_size, total_iterations):
-    image_np = np.array(image)  # ✅ 确保 `numpy` 数据类型正确
-    print(image_np.shape)
-    H, W = image_np.shape[:2]  # 取得图片高宽
-    # rescale to match image size
-    centerbias = zoom(centerbias_template, (H/centerbias_template.shape[0], W/centerbias_template.shape[1]), order=0, mode='nearest')
-    # renormalize log density
-    centerbias -= logsumexp(centerbias)
-    centerbias_tensor = torch.tensor([centerbias], device=device)  # (batch, H, W)
+# def process_image_with_deepgaze_batch(model,centerbias_template, image, num_points, batch_size, total_iterations):
+#     image_np = np.array(image)  # ✅ 确保 `numpy` 数据类型正确
+#     print(image_np.shape)
+#     H, W = image_np.shape[:2]  # 取得图片高宽
+#     # rescale to match image size
+#     centerbias = zoom(centerbias_template, (H/centerbias_template.shape[0], W/centerbias_template.shape[1]), order=0, mode='nearest')
+#     # renormalize log density
+#     centerbias -= logsumexp(centerbias)
+#     centerbias_tensor = torch.tensor([centerbias], device=device)  # (batch, H, W)
         
-    iteration_counter = 0
-    batch_heatmaps = []
-    while(iteration_counter < total_iterations):
+#     iteration_counter = 0
+#     batch_heatmaps = []
+#     while(iteration_counter < total_iterations):
 
-        cur_batch_size = min(batch_size, total_iterations - iteration_counter)
-        print(f"Iteration: {iteration_counter} to {iteration_counter + cur_batch_size} | Total Iterations: {total_iterations}")
+#         cur_batch_size = min(batch_size, total_iterations - iteration_counter)
 
-        # 生成 num_iterations 个随机 fixation points
-        points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
-        fixation_history_x = points[:, :, 0] # 形状: (num_iterations, num_points)
-        fixation_history_y = points[:, :, 1]
+#         if external_fixations is not None:
+#             fixation_history_x = external_fixations["x"][iteration_counter:iteration_counter+cur_batch_size]
+#             fixation_history_y = external_fixations["y"][iteration_counter:iteration_counter+cur_batch_size]
+#         else:
+#             # 默认仍然是随机生成
+#             points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+#             fixation_history_x = points[:, :, 0]
+#             fixation_history_y = points[:, :, 1]
 
-        # 批量化 centerbias 和 image tensor
-        image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)  # 形状: (batch_size, H, W, C)
-        # 转换为 PyTorch tensors 并移动到 `device`
-        image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)  # (batch, C, H, W)
-        x_hist_tensor = torch.tensor(fixation_history_x, device=device)  # (batch, num_points)
-        y_hist_tensor = torch.tensor(fixation_history_y, device=device)  # (batch, num_points)
+#         print(f"Iteration: {iteration_counter} to {iteration_counter + cur_batch_size} | Total Iterations: {total_iterations}")
 
-        # 批量预测
-        print("enter model")      
-        print(image_tensor.shape)
-        log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)  # 形状: (batch, 1, H, W)
-        print("exit model")      
-        # 提取 heatmaps 并计算均值
-        heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]  # 形状: (batch, H, W)
-        print(heatmaps.shape)
+#         # 生成 num_iterations 个随机 fixation points
+#         points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+#         fixation_history_x = points[:, :, 0] # 形状: (num_iterations, num_points)
+#         fixation_history_y = points[:, :, 1]
+
+#         # 批量化 centerbias 和 image tensor
+#         image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)  # 形状: (batch_size, H, W, C)
+#         # 转换为 PyTorch tensors 并移动到 `device`
+#         image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)  # (batch, C, H, W)
+#         x_hist_tensor = torch.tensor(fixation_history_x, device=device)  # (batch, num_points)
+#         y_hist_tensor = torch.tensor(fixation_history_y, device=device)  # (batch, num_points)
+
+#         # 批量预测
+#         print("enter model")      
+#         print(image_tensor.shape)
+#         log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)  # 形状: (batch, 1, H, W)
+#         print("exit model")      
+#         # 提取 heatmaps 并计算均值
+#         heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]  # 形状: (batch, H, W)
+#         print(heatmaps.shape)
 
         
-        batch_heatmaps.append(heatmaps)
-        iteration_counter += cur_batch_size
+#         batch_heatmaps.append(heatmaps)
+#         iteration_counter += cur_batch_size
         
-    batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)  # (total_iterations, H, W)
-    print(batch_heatmaps.shape)
+#     batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)  # (total_iterations, H, W)
+#     print(batch_heatmaps.shape)
 
-    final_heatmap = np.mean(batch_heatmaps, axis=0)  # 形状: (H, W)
-    print(final_heatmap.shape)
+#     final_heatmap = np.mean(batch_heatmaps, axis=0)  # 形状: (H, W)
+#     print(final_heatmap.shape)
 
-    # 归一化 heatmap 到 [0, 255]
-    # final_heatmap = (255 * (final_heatmap - np.min(final_heatmap)) / (np.max(final_heatmap) - np.min(final_heatmap))).astype(np.uint8)
-    return final_heatmap
+#     # 归一化 heatmap 到 [0, 255]
+#     # final_heatmap = (255 * (final_heatmap - np.min(final_heatmap)) / (np.max(final_heatmap) - np.min(final_heatmap))).astype(np.uint8)
+#     return final_heatmap
 
-def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"}):
-    result = []
-    for image in batch[input_key]:  
-        print("enter batch")
-        centerbias_template = centerbias_template_zeros if params["centerbias"] == "zeros" else centerbias_template_original
-        print("centerbias_template")
-        print(centerbias_template)
-        heatmap = process_image_with_deepgaze_batch(deepgaze_model, centerbias_template, image, params["num_points"], params["batch_random_size"], params["total_iterations"])
-        print(type(heatmap))
+# def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"}):
+#     result = []
+#     for image in batch[input_key]:  
+#         print("enter batch")
+#         centerbias_template = centerbias_template_zeros if params["centerbias"] == "zeros" else centerbias_template_original
+#         print("centerbias_template")
+#         print(centerbias_template)
+#         heatmap = process_image_with_deepgaze_batch(deepgaze_model, centerbias_template, image, params["num_points"], params["batch_random_size"], params["total_iterations"])
+#         print(type(heatmap))
         
-        heatmap_image = apply_colormap(heatmap)
-        print(type(heatmap_image))
-        result.append(heatmap_image)
-    batch[output_key] = result
-    return batch
+#         heatmap_image = apply_colormap(heatmap)
+#         print(type(heatmap_image))
+#         result.append(heatmap_image)
+#     batch[output_key] = result
+#     return batch
+
+
+
+
+# import torch
+# from PIL import Image as PILImage
+# from datasets import Image as HFImage
+# import deepgaze_pytorch
+# import numpy as np
+# import matplotlib.cm as cm
+# from scipy.ndimage import zoom
+# from scipy.special import logsumexp
+# import matplotlib.pyplot as plt
+
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
+
+# centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
+# centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
+
+# def apply_colormap(image_array, colormap="jet"):
+#     if len(image_array.shape) == 3 and image_array.shape[2] == 1:
+#         image_array = image_array.squeeze()
+#     normalized = (image_array - image_array.min()) / (image_array.max() - image_array.min())
+#     colormap_function = cm.get_cmap(colormap)
+#     colored_image = colormap_function(normalized)
+#     colored_image = (colored_image[:, :, :3] * 255).astype(np.uint8)
+#     return PILImage.fromarray(colored_image)
+
+# def normalize_image_array_8bit(image):
+#     normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
+#     return normalized_image
+
+# def process_image_with_deepgaze_batch(model, centerbias_template, image, num_points, batch_size, total_iterations, external_fixations=None):
+#     image_np = np.array(image)
+#     H, W = image_np.shape[:2]
+#     centerbias = zoom(centerbias_template, (H/centerbias_template.shape[0], W/centerbias_template.shape[1]), order=0, mode='nearest')
+#     centerbias -= logsumexp(centerbias)
+#     centerbias_tensor = torch.tensor([centerbias], device=device)
+
+#     iteration_counter = 0
+#     batch_heatmaps = []
+
+#     while iteration_counter < total_iterations:
+#         cur_batch_size = min(batch_size, total_iterations - iteration_counter)
+
+#         if external_fixations is not None:
+#             fixation_history_x = external_fixations["x"][iteration_counter:iteration_counter+cur_batch_size].astype(np.int64)
+#             fixation_history_y = external_fixations["y"][iteration_counter:iteration_counter+cur_batch_size].astype(np.int64)
+#         else:
+#             points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+#             fixation_history_x = points[:, :, 0]
+#             fixation_history_y = points[:, :, 1]
+
+#         image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)
+#         image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)
+#         x_hist_tensor = torch.tensor(fixation_history_x, device=device)
+#         y_hist_tensor = torch.tensor(fixation_history_y, device=device)
+
+#         log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)
+#         heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]
+#         batch_heatmaps.append(heatmaps)
+
+#         iteration_counter += cur_batch_size
+
+#     batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)
+#     final_heatmap = np.mean(batch_heatmaps, axis=0)
+
+#     return final_heatmap
+
+# def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"}, external_fixations=None):
+#     result = []
+#     for image in batch[input_key]:
+#         centerbias_template = centerbias_template_zeros if params["centerbias"] == "zeros" else centerbias_template_original
+#         heatmap = process_image_with_deepgaze_batch(deepgaze_model, centerbias_template, image, params["num_points"], params["batch_random_size"], params["total_iterations"], external_fixations)
+#         heatmap_image = apply_colormap(heatmap)
+#         result.append(heatmap_image)
+#     batch[output_key] = result
+#     return batch
+
+#用作对比shaw weihao代码区别
+# import torch
+# from PIL import Image as PILImage
+# from datasets import Image as HFImage
+# import deepgaze_pytorch
+# import numpy as np
+# import matplotlib.cm as cm
+# from scipy.ndimage import zoom
+# from scipy.special import logsumexp
+# import matplotlib.pyplot as plt
+
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
+
+# centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
+# centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
+
+# def apply_colormap(image_array, colormap="jet"):
+#     if len(image_array.shape) == 3 and image_array.shape[2] == 1:
+#         image_array = image_array.squeeze()
+#     normalized = (image_array - image_array.min()) / (image_array.max() - image_array.min())
+#     colormap_function = cm.get_cmap(colormap)
+#     colored_image = colormap_function(normalized)
+#     colored_image = (colored_image[:, :, :3] * 255).astype(np.uint8)
+#     return PILImage.fromarray(colored_image)
+
+# def normalize_image_array_8bit(image):
+#     normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
+#     return normalized_image
+
+# def process_image_with_deepgaze_batch(model, centerbias_template, image, num_points, batch_size, total_iterations, external_fixations=None):
+#     image_np = np.array(image)
+#     H, W = image_np.shape[:2]
+    
+#     # 👉 Centerbias special handling
+#     if np.all(centerbias_template == 0):
+#         centerbias = np.zeros((H, W))
+#     else:
+#         centerbias = zoom(centerbias_template, (H/centerbias_template.shape[0], W/centerbias_template.shape[1]), order=0, mode='nearest')
+#         centerbias -= logsumexp(centerbias)
+
+#     centerbias_tensor = torch.tensor([centerbias], device=device)
+
+#     iteration_counter = 0
+#     batch_heatmaps = []
+
+#     while iteration_counter < total_iterations:
+#         cur_batch_size = min(batch_size, total_iterations - iteration_counter)
+
+#         if external_fixations is not None:
+#             fixation_history_x = external_fixations["x"][iteration_counter:iteration_counter+cur_batch_size].astype(np.int64)
+#             fixation_history_y = external_fixations["y"][iteration_counter:iteration_counter+cur_batch_size].astype(np.int64)
+#         else:
+#             points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+#             fixation_history_x = points[:, :, 0]
+#             fixation_history_y = points[:, :, 1]
+
+#         image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)
+#         image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)
+#         x_hist_tensor = torch.tensor(fixation_history_x, device=device)
+#         y_hist_tensor = torch.tensor(fixation_history_y, device=device)
+
+#         log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)
+#         heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]
+#         batch_heatmaps.append(heatmaps)
+
+#         iteration_counter += cur_batch_size
+
+#     batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)
+#     final_heatmap = np.mean(batch_heatmaps, axis=0)
+
+#     return final_heatmap
+
+
+# def deepgaze_process(batch, input_key, output_key, params, external_fixations=None):
+#     result = []
+#     raw_heatmaps = []
+#     for image in batch[input_key]:
+#         centerbias_template = centerbias_template_zeros if params["centerbias"] == "zeros" else centerbias_template_original
+#         heatmap = process_image_with_deepgaze_batch(deepgaze_model, centerbias_template, image, params["num_points"], params["batch_random_size"], params["total_iterations"], external_fixations)
+#         raw_heatmaps.append(heatmap)
+#         heatmap_image = apply_colormap(heatmap)
+#         result.append(heatmap_image)
+#     batch[output_key] = result
+#     batch["raw_heatmaps"] = raw_heatmaps
+#     return batch
+
 
 
 # # Shaw's original code
@@ -150,3 +327,173 @@ def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "bat
 #     # Average the heatmaps to reduce the influence of individual fixation points
 #     final_heatmap = np.mean(heatmaps, axis=0)
 #     return final_heatmap
+
+import os
+import sys
+sys.path.insert(0, "/Users/shaw/HFDatasetMaker")  # ✅ 插入 ScanpathAnalysis 根目录
+
+import torch
+from PIL import Image as PILImage
+from datasets import Image as HFImage
+
+from deepgaze_pytorch.deepgaze3 import DeepGazeIII  # ✅ 用包路径导入
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = DeepGazeIII(pretrained=True).to(device)
+
+import numpy as np
+import matplotlib.cm as cm
+from scipy.ndimage import zoom
+from scipy.special import logsumexp
+import matplotlib.pyplot as plt
+
+centerbias_template = np.load("/Users/shaw/HFDatasetMaker/deepgaze_pytorch/centerbias_mit1003.npy")
+
+
+
+
+
+def apply_colormap(image_array, colormap="jet"):
+    """
+    Converts a grayscale NumPy array into a colored image using a colormap.
+
+    Args:
+        image_array (np.ndarray): Input grayscale image (H, W) or (H, W, 1)
+        colormap (str): Colormap name (e.g., "jet", "viridis", "magma")
+
+    Returns:
+        PIL.Image: Colormapped image
+    """
+    if len(image_array.shape) == 3 and image_array.shape[2] == 1:
+        image_array = image_array.squeeze()  # Convert (H, W, 1) -> (H, W)
+    
+    # Normalize to [0,1] if not already
+    normalized = (image_array - image_array.min()) / (image_array.max() - image_array.min())
+    
+    # Apply the colormap
+    colormap_function = cm.get_cmap(colormap)
+    colored_image = colormap_function(normalized)  # (H, W, 4) -> RGBA
+    
+    # Convert to uint8 and remove the alpha channel
+    colored_image = (colored_image[:, :, :3] * 255).astype(np.uint8)  # RGB format
+    
+    # Convert to PIL image
+    return PILImage.fromarray(colored_image)
+
+def normalize_image_array_8bit(image):
+    normalized_image = (255 * (image - np.min(image)) / (np.max(image) - np.min(image))).astype(np.uint8)
+    return normalized_image
+
+# def process_image_with_deepgaze_batch(image, num_points, batch_size, total_iterations):
+#     image_np = np.array(image)  # ✅ 确保 `numpy` 数据类型正确
+#     print(image_np.shape)
+#     H, W = image_np.shape[:2]  # 取得图片高宽
+#     # rescale to match image size
+#     centerbias = zoom(centerbias_template, (H/centerbias_template.shape[0], W/centerbias_template.shape[1]), order=0, mode='nearest')
+#     # renormalize log density
+#     centerbias -= logsumexp(centerbias)
+#     centerbias_tensor = torch.tensor([centerbias], device=device)  # (batch, H, W)
+        
+#     iteration_counter = 0
+#     batch_heatmaps = []
+#     while(iteration_counter < total_iterations):
+
+#         cur_batch_size = min(batch_size, total_iterations - iteration_counter)
+#         print(f"Iteration: {iteration_counter} to {iteration_counter + cur_batch_size} | Total Iterations: {total_iterations}")
+
+#         # 生成 num_iterations 个随机 fixation points
+#         points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+#         fixation_history_x = points[:, :, 0] # 形状: (num_iterations, num_points)
+#         fixation_history_y = points[:, :, 1]
+
+#         # 批量化 centerbias 和 image tensor
+#         image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)  # 形状: (batch_size, H, W, C)
+#         # 转换为 PyTorch tensors 并移动到 `device`
+#         image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)  # (batch, C, H, W)
+#         x_hist_tensor = torch.tensor(fixation_history_x, device=device)  # (batch, num_points)
+#         y_hist_tensor = torch.tensor(fixation_history_y, device=device)  # (batch, num_points)
+
+#         # 批量预测
+#         print("enter model")      
+#         print(image_tensor.shape)
+#         log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)  # 形状: (batch, 1, H, W)
+#         print("exit model")      
+#         # 提取 heatmaps 并计算均值
+#         heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]  # 形状: (batch, H, W)
+#         print(heatmaps.shape)
+
+        
+#         batch_heatmaps.append(heatmaps)
+#         iteration_counter += cur_batch_size
+        
+#     batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)  # (total_iterations, H, W)
+#     print(batch_heatmaps.shape)
+
+#     final_heatmap = np.mean(batch_heatmaps, axis=0)  # 形状: (H, W)
+#     print(final_heatmap.shape)
+
+#     # 归一化 heatmap 到 [0, 255]
+#     # final_heatmap = (255 * (final_heatmap - np.min(final_heatmap)) / (np.max(final_heatmap) - np.min(final_heatmap))).astype(np.uint8)
+#     return final_heatmap
+
+def process_image_with_deepgaze_batch(image, num_points, batch_size, total_iterations, original_image_path=None):
+    image_np = np.array(image)
+    H, W = image_np.shape[:2]
+    centerbias = zoom(centerbias_template, (H / centerbias_template.shape[0], W / centerbias_template.shape[1]), order=0, mode='nearest')
+    centerbias -= logsumexp(centerbias)
+    centerbias_tensor = torch.tensor([centerbias], device=device)
+
+    iteration_counter = 0
+    batch_heatmaps = []
+
+    while iteration_counter < total_iterations:
+        cur_batch_size = min(batch_size, total_iterations - iteration_counter)
+        points = np.random.randint(0, [W, H], size=(cur_batch_size, num_points, 2))
+        fixation_history_x = points[:, :, 0]
+        fixation_history_y = points[:, :, 1]
+
+        image_batch = np.repeat(image_np[None, :, :, :], cur_batch_size, axis=0)
+        image_tensor = torch.tensor(image_batch.transpose(0, 3, 1, 2), device=device)
+        x_hist_tensor = torch.tensor(fixation_history_x, device=device)
+        y_hist_tensor = torch.tensor(fixation_history_y, device=device)
+
+        print("enter model")
+        log_density_predictions = model(image_tensor, centerbias_tensor, x_hist_tensor, y_hist_tensor)
+        print("exit model")
+        heatmaps = log_density_predictions.detach().cpu().numpy()[:, 0]
+        batch_heatmaps.append(heatmaps)
+        iteration_counter += cur_batch_size
+
+    batch_heatmaps = np.concatenate(batch_heatmaps, axis=0)  # [10, H, W]
+
+    # 🔁 Save the full stack as .npz
+    if original_image_path is not None:
+        save_heatmaps_npz(batch_heatmaps, original_image_path)
+
+    final_heatmap = np.mean(batch_heatmaps, axis=0)
+    return final_heatmap
+
+
+def deepgaze_process(batch, input_key, output_key, num_points=4, batch_random_size = 1, total_iterations=10):    
+    result = []
+    for image in batch[input_key]:  
+        print("enter batch")      
+        heatmap = process_image_with_deepgaze_batch(image, num_points, batch_random_size, total_iterations)
+        print(type(heatmap))
+        
+        heatmap_image = apply_colormap(heatmap)
+        print(type(heatmap_image))
+        result.append(heatmap_image)
+    batch[output_key] = result
+    return batch
+
+def save_heatmaps_npz(batch_heatmaps, original_image_path, output_dir="diff_output/npz_heatmaps"):
+    """
+    Save raw [10, H, W] heatmap array into .npz file named after the original image.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    image_basename = os.path.basename(original_image_path)
+    image_id = os.path.splitext(image_basename)[0]  # e.g. "C-streetPhotography-8"
+    save_path = os.path.join(output_dir, f"{image_id}_heatmaps.npz")
+    np.savez_compressed(save_path, heatmaps=batch_heatmaps)
+    print(f"✅ Saved raw heatmaps -> {save_path}")    
