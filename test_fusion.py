@@ -1,18 +1,30 @@
 import os
+import argparse
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, maximum_filter
 
-# 设置路径
-npz_dir = "diff_output/npz_heatmaps"
-output_dir = "diff_output/fusion_comparison"
-diff_output_dir = os.path.join(output_dir, "diffs")
-os.makedirs(output_dir, exist_ok=True)
-os.makedirs(diff_output_dir, exist_ok=True)
+# === CLI 参数 ===
+parser = argparse.ArgumentParser()
+parser.add_argument("--gray", action="store_true", help="Use grayscale colormap instead of jet")
+args = parser.parse_args()
 
-# 融合方法定义
+# === 输出工具 ===
+def save_colormap(heatmap, save_path, cmap="jet"):
+    norm = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
+    colored = cm.get_cmap(cmap)(norm)[..., :3]
+    img = Image.fromarray((colored * 255).astype(np.uint8))
+    img.save(save_path)
+
+def save_difference_map(method_name, fused, mean_map, base_name, diff_output_dir):
+    diff = np.abs(fused - mean_map)
+    diff_path = os.path.join(diff_output_dir, f"{base_name}_diff_vs_mean_{method_name}.jpg")
+    save_colormap(diff, diff_path, cmap="hot")
+    print(f"📌 Saved difference map vs mean for {method_name} -> {diff_path}")
+
+# === Fusion methods ===
 def fusion_mean(heatmaps):
     return np.mean(heatmaps, axis=0)
 
@@ -21,28 +33,24 @@ def fusion_multiply_then_softmax(heatmaps):
     exp = np.exp(mul - np.max(mul))
     return exp / np.sum(exp)
 
+
 def fusion_softmax_then_multiply(heatmaps):
     softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
     softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
     return np.prod(softmaxed, axis=0)
 
+
 def fusion_softmax_then_multiply_then_softmax(heatmaps):
-    # Step 1: 对每个 heatmap 做 softmax
     softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
-    softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)  # shape: (10, H, W)
-
-    # Step 2: multiply 所有 softmax 后的 heatmaps
-    product = np.prod(softmaxed, axis=0)  # shape: (H, W)
-
-    # Step 3: 再对乘积图做一次 softmax（全图归一化）
+    softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
+    product = np.prod(softmaxed, axis=0)
     final_exp = np.exp(product - np.max(product))
-    final_softmax = final_exp / np.sum(final_exp)
-
-    return final_softmax
+    return final_exp / np.sum(final_exp)
 
 
 def fusion_max(heatmaps):
     return np.max(heatmaps, axis=0)
+
 
 def fusion_softor(heatmaps):
     softmaps = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
@@ -50,119 +58,179 @@ def fusion_softor(heatmaps):
     complement = 1 - softmaps
     return 1 - np.prod(complement, axis=0)
 
-def fusion_softmax_sum(heatmaps):
-    """
-    对每张 heatmap 做 softmax，然后直接逐像素相加。
 
-    这会放大被多张图共同关注的区域，但也保留少量分布式关注。
-    """
-    # 对每张图做 softmax
+def fusion_softmax_sum(heatmaps):
     softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
     softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
-
-    # 直接逐像素加和（不做平均）
     return np.sum(softmaxed, axis=0)
 
-def fusion_softmax_sum_then_softmax(heatmaps):
+
+def fusion_softmax_lighten(heatmaps):
+    softmaps = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
+    softmaps /= np.sum(softmaps, axis=(1, 2), keepdims=True)
+    return np.max(softmaps, axis=0)
+
+
+def fusion_normalized_lighten(heatmaps):
+    norm_maps = []
+    for h in heatmaps:
+        h_norm = (h - np.min(h)) / (np.max(h) - np.min(h) + 1e-8)
+        norm_maps.append(h_norm)
+    norm_maps = np.stack(norm_maps, axis=0)
+    return np.max(norm_maps, axis=0)
+
+
+def fusion_softmax_peak_preserve(heatmaps):
     """
-    每张 heatmap 单独做 softmax → 加总 → 再做一次全局 softmax。
-    强调所有 heatmap 的显著共同区域。
+    保留每张 heatmap 做 softmax 后的峰值区域：
+    - 每张做 softmax
+    - 然后用 pixel-wise maximum（lighten-style）融合
     """
-    # 对每张图单独 softmax
     softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
     softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
+    return np.max(softmaxed, axis=0)
 
+
+def fusion_softmax_sum_enhanced(heatmaps):
+    softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
+    softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
     summed = np.sum(softmaxed, axis=0)
-
-    # 对加和结果再做一次 softmax
-    exp = np.exp(summed - np.max(summed))
-    return exp / np.sum(exp)
+    # 非线性增强以突出强响应区域
+    return np.power(summed, 1.5)
 
 
 def fusion_weighted_softmax(heatmaps):
     weights = heatmaps.max(axis=(1, 2))
-    print("📊 [weighted_softmax] Weights before normalization:", weights)
-    weights = weights / weights.sum()
-    print("📊 [weighted_softmax] Normalized weights:", weights)
+    weights /= weights.sum()
     return np.sum(heatmaps * weights[:, None, None], axis=0)
+
 
 def fusion_gaussian_smooth(heatmaps):
     smoothed = np.array([gaussian_filter(h, sigma=3) for h in heatmaps])
     return np.mean(smoothed, axis=0)
+
 
 def fusion_local_max(heatmaps):
     return np.max(np.array([
         h * (h == gaussian_filter(h, sigma=1)) for h in heatmaps
     ]), axis=0)
 
+
 def fusion_attention_like(heatmaps):
     weights = np.sum(heatmaps, axis=(1, 2))
-    print("📊 [attention_like] Weights before normalization:", weights)
     weights /= np.sum(weights)
-    print("📊 [attention_like] Normalized weights:", weights)
     return np.sum(heatmaps * weights[:, None, None], axis=0)
+
+
+def fusion_top_k_sum(heatmaps, percentile=99):
+    masks = []
+    for h in heatmaps:
+        thresh = np.percentile(h, percentile)
+        masks.append(np.where(h >= thresh, h, 0))
+    fused = np.sum(masks, axis=0)
+    return fused
+
+
+def fusion_rank_weighted_sum(heatmaps):
+    max_vals = np.max(heatmaps, axis=(1, 2))
+    ranks = np.argsort(-max_vals)
+    weights = np.linspace(1, 0.1, len(ranks))
+    weights = weights[np.argsort(ranks)]
+    return np.sum(heatmaps * weights[:, None, None], axis=0)
+
+
+def fusion_adaptive_local_max(heatmaps, size=3):
+    enhanced = []
+    for h in heatmaps:
+        peak_mask = (h == maximum_filter(h, size=size))
+        enhanced.append(h * peak_mask)
+    return np.sum(enhanced, axis=0)
+
 
 fusions = {
     "mean": fusion_mean,
-    "multiply->softmax": fusion_multiply_then_softmax,
-    "softmax->multiply": fusion_softmax_then_multiply,
-    "softmax->multiply->softmax": fusion_softmax_then_multiply_then_softmax,
+    "fusion_max": fusion_max,
+    "fusion_softmax_peak_preserve": fusion_softmax_peak_preserve,
+    "fusion_softmax_sum_enhanced": fusion_softmax_sum_enhanced,
     "softor": fusion_softor,
     "fusion_softmax_sum": fusion_softmax_sum,
-    "fusion_softmax_sum_then_softmax": fusion_softmax_sum_then_softmax,
+    "fusion_softmax_lighten": fusion_softmax_lighten,
+    "fusion_normalized_lighten": fusion_normalized_lighten,
     "weighted_softmax": fusion_weighted_softmax,
-    # "gaussian_smooth": fusion_gaussian_smooth,
-    "local_max": fusion_local_max,
-    # "attention_like": fusion_attention_like,
+    "fusion_top_k_sum": fusion_top_k_sum,
+    "fusion_rank_weighted_sum": fusion_rank_weighted_sum,
+    "fusion_adaptive_local_max": fusion_adaptive_local_max
 }
 
-def save_colormap(heatmap, save_path, cmap="jet"):
-    norm = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
-    colored = cm.get_cmap(cmap)(norm)[..., :3]
-    img = Image.fromarray((colored * 255).astype(np.uint8))
-    img.save(save_path)
+# === Image saving ===
+npz_root_dir = "/Volumes/G-Drive/deepgaze_npz"
+base_output_dir = "/Volumes/G-Drive/deepgaze_outputs"
+output_root_dir = os.path.join(
+    base_output_dir,
+    "fusion_comparison_gray" if args.gray else "fusion_comparison_colormap"
+)
 
-def save_difference_map(method_name, fused, mean_map, base_name):
-    diff = np.abs(fused - mean_map)
-    diff_path = os.path.join(diff_output_dir, f"{base_name}_diff_vs_mean_{method_name}.jpg")
-    save_colormap(diff, diff_path, cmap="hot")
-    print(f"📌 Saved difference map vs mean for {method_name} -> {diff_path}")
+# === {original, zeros} × {Complex, NonComplex} ===
+for bias_type in ["original", "zeros"]:
+    for group in ["Complex", "NonComplex"]:
+        npz_dir = os.path.join(npz_root_dir, bias_type, group)
+        output_dir = os.path.join(output_root_dir, bias_type, group)
+        diff_output_dir = os.path.join(output_dir, "diffs")
+        individual_softmax_dir = os.path.join(output_dir, "individual_softmax")
 
-# 仅跑前三张图
-sample_files = sorted(f for f in os.listdir(npz_dir) if f.endswith(".npz"))[:5]
+        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(diff_output_dir, exist_ok=True)
+        os.makedirs(individual_softmax_dir, exist_ok=True)
 
-for fname in sample_files:
-    path = os.path.join(npz_dir, fname)
-    data = np.load(path)["heatmaps"]  # shape [10, H, W]
-    base = os.path.splitext(fname)[0]
+        sample_files = sorted(
+            f for f in os.listdir(npz_dir)
+            if f.endswith(".npz") and not f.startswith("._")
+        )
 
-    # 输出每个 heatmap 的统计信息
-    print(f"\n📂 Processing {base}")
-    for i, h in enumerate(data):
-        print(f" - Heatmap {i}: mean={h.mean():.4f}, max={h.max():.4f}, std={h.std():.4f}")
+        for fname in sample_files:
+            path = os.path.join(npz_dir, fname)
+            try:
+                data = np.load(path)["heatmaps"]
+            except Exception as e:
+                print(f"❌ Failed to load {fname}: {e}")
+                continue
 
-    fig, axes = plt.subplots(3, 3, figsize=(12, 12))
-    axes = axes.flatten()
+            base = os.path.splitext(fname)[0]
+            print(f"\n📂 Processing [{bias_type}/{group}] {base}")
 
-    mean_map = fusion_mean(data)
+            # Individual softmax maps
+            for i, h in enumerate(data):
+                softmaxed = np.exp(h - np.max(h))
+                softmaxed /= np.sum(softmaxed)
+                individual_path = os.path.join(individual_softmax_dir, f"{base}_softmax_{i}.jpg")
+                save_colormap(softmaxed, individual_path, cmap="gray" if args.gray else "jet")
 
-    for i, (method_name, fusion_func) in enumerate(fusions.items()):
-        fused = fusion_func(data)
-        out_path = os.path.join(output_dir, f"{base}_{method_name}.jpg")
-        save_colormap(fused, out_path)
+            # Fusion visualizations
+            mean_map = fusion_mean(data)
+            n_methods = len(fusions)
+            cols = 4
+            rows = (n_methods + cols - 1) // cols
+            fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+            axes = axes.flatten()
 
-        norm = (fused - fused.min()) / (fused.max() - fused.min() + 1e-8)
-        colored = cm.get_cmap("jet")(norm)[..., :3]
-        axes[i].imshow(colored)
-        axes[i].set_title(method_name)
-        axes[i].axis("off")
+            for i, (method_name, fusion_func) in enumerate(fusions.items()):
+                fused = fusion_func(data)
+                out_path = os.path.join(output_dir, f"{base}_{method_name}.jpg")
+                save_colormap(fused, out_path, cmap="gray" if args.gray else "jet")
 
-        # 输出差异图（mean vs 当前方法）
-        if method_name != "mean":
-            save_difference_map(method_name, fused, mean_map, base)
+                norm = (fused - fused.min()) / (fused.max() - fused.min() + 1e-8)
+                axes[i].imshow(norm, cmap="gray" if args.gray else "jet")
+                axes[i].set_title(method_name)
+                axes[i].axis("off")
 
-    plt.tight_layout()
-    grid_path = os.path.join(output_dir, f"{base}_grid.jpg")
-    plt.savefig(grid_path, dpi=200)
-    plt.close()
-    print(f"✅ Saved comparison grid: {grid_path}")
+                if method_name != "mean":
+                    save_difference_map(method_name, fused, mean_map, base, diff_output_dir)
+
+            for j in range(i + 1, len(axes)):
+                axes[j].axis("off")
+
+            plt.tight_layout()
+            grid_path = os.path.join(output_dir, f"{base}_grid.jpg")
+            plt.savefig(grid_path, dpi=200)
+            plt.close()
+            print(f"✅ Saved grid: {grid_path}")
