@@ -16,6 +16,26 @@ deepgaze_model = deepgaze_pytorch.DeepGazeIII(pretrained=True).to(device)
 centerbias_template_original = np.load('deepgaze_pytorch/centerbias_mit1003.npy')
 centerbias_template_zeros = np.zeros([centerbias_template_original.shape[0], centerbias_template_original.shape[1]])
 
+def fusion_mean(heatmaps):
+    return np.mean(heatmaps, axis=0)
+
+def fusion_softor(heatmaps):
+    softmaps = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
+    softmaps /= np.sum(softmaps, axis=(1, 2), keepdims=True)
+    complement = 1 - softmaps
+    return 1 - np.prod(complement, axis=0)
+
+def fusion_weighted_softmax(heatmaps):
+    weights = heatmaps.max(axis=(1, 2))
+    weights /= weights.sum()
+    return np.sum(heatmaps * weights[:, None, None], axis=0)
+
+fusion_methods = {
+    "mean": fusion_mean,
+    "softor": fusion_softor,
+    "weighted_softmax": fusion_weighted_softmax
+}
+
 def apply_colormap(image_array, colormap="jet"):
     """
     Converts a grayscale NumPy array into a colored image using a colormap.
@@ -56,8 +76,9 @@ def save_heatmaps_npz(batch_heatmaps, original_image_path, output_dir):
     np.savez_compressed(save_path, heatmaps=batch_heatmaps)
     print(f"✅ Saved raw heatmaps -> {save_path}")
 
-def process_image_with_deepgaze_batch(model,centerbias_template, image, num_points, batch_size, total_iterations,
+def process_image_with_deepgaze_batch(*, model, centerbias_template, image, num_points, batch_size, total_iterations,
                                       original_image_path=None, npz_output_dir=None, feature_method="mean"):
+
     image_np = np.array(image)  # ✅ 确保 `numpy` 数据类型正确
     print(image_np.shape)
     H, W = image_np.shape[:2]  # 取得图片高宽
@@ -142,11 +163,12 @@ def process_image_with_deepgaze_batch(model,centerbias_template, image, num_poin
 
     # fusion method support
     if feature_method == "mean":
-        final_heatmap = np.mean(heatmaps, axis=0)
-    elif feature_method == "softmax_peak":
-        softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
-        softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
-        final_heatmap = np.max(softmaxed, axis=0)
+        final_heatmap = fusion_methods[feature_method](heatmaps)
+    #     final_heatmap = np.mean(heatmaps, axis=0)
+    # elif feature_method == "softmax_peak":
+    #     softmaxed = np.exp(heatmaps - np.max(heatmaps, axis=(1, 2), keepdims=True))
+    #     softmaxed /= np.sum(softmaxed, axis=(1, 2), keepdims=True)
+    #     final_heatmap = np.max(softmaxed, axis=0)
     else:
         raise ValueError(f"Unsupported feature_method: {feature_method}")
 
@@ -154,8 +176,20 @@ def process_image_with_deepgaze_batch(model,centerbias_template, image, num_poin
     # final_heatmap = (255 * (final_heatmap - np.min(final_heatmap)) / (np.max(final_heatmap) - np.min(final_heatmap))).astype(np.uint8)
     return final_heatmap
 
-def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"},
-                     image_paths=None, feature_method="mean", npz_output_dir="diff_output/npz_heatmaps"):
+# def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"},
+#                      image_paths=None, feature_method="mean", npz_output_dir="diff_output/npz_heatmaps"):
+
+def deepgaze_process(batch, input_key, output_key, params):
+    num_points = params.get("num_points", 4)
+    batch_random_size = params.get("batch_random_size", 1)
+    total_iterations = params.get("total_iterations", 10)
+    centerbias_type = params.get("centerbias", "zeros")
+    feature_method = params.get("feature_method", "mean")
+    npz_output_dir = params.get("npz_output_dir", "diff_output/npz_heatmaps")
+    if npz_output_dir:
+        os.makedirs(npz_output_dir, exist_ok=True)
+    image_paths = params.get("image_paths", None)
+
     result = []
     for i, image in enumerate(batch[input_key]):  
         print("enter batch")
@@ -165,17 +199,20 @@ def deepgaze_process(batch, input_key, output_key, params={"num_points": 4, "bat
         print("centerbias_template")
         print(centerbias_template)
 
-        heatmap = process_image_with_deepgaze_batch(
-            deepgaze_model,
-            centerbias_template,
-            image,
-            params["num_points"],
-            params["batch_random_size"],
-            params["total_iterations"],
-            original_image_path=original_image_path,
-            npz_output_dir=npz_output_dir,
-            feature_method=feature_method
-        )        
+        params_for_batch = {
+            "model": deepgaze_model,
+            "centerbias_template": centerbias_template,
+            "image": image,
+            "num_points": num_points,
+            "batch_size": batch_random_size,
+            "total_iterations": total_iterations,
+            "original_image_path": original_image_path,
+            "npz_output_dir": npz_output_dir,
+            "feature_method": feature_method
+        }
+
+        heatmap = process_image_with_deepgaze_batch(**params_for_batch)
+        
         print(type(heatmap))
         heatmap_image = apply_colormap(heatmap)
         print(type(heatmap_image))

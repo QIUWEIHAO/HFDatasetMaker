@@ -69,7 +69,9 @@ processors = [
     {"function": load_image, "input": "image_path", "output": "image_original", "params": {"num_proc": 4}},
     {"function": resize_image, "input": "image_original", "output": "image_resized", "params": {"num_proc": 4, "max_dims": (1024, 768)}},
     {"function": generate_caption, "input": "image_resized", "output": "caption", "params": {"num_proc": 1}},
-    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros"}},
+    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "mean", "npz_output_dir": "diff_output/npz_heatmaps"}},
+    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature_softor", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "softor", "npz_output_dir": "diff_output/npz_heatmaps"}},
+    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature_weighted_softmax", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "weighted_softmax", "npz_output_dir": "diff_output/npz_heatmaps"}},
 ]
 
 # 3️⃣ **批量处理数据**

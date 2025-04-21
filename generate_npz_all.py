@@ -1,6 +1,6 @@
 import os
 from PIL import Image
-from processors.deepgaze_feature import process_image_with_deepgaze_batch
+from processors.deepgaze_feature import deepgaze_process
 
 # === 设置路径 ===
 root_dir = "dataset/GeorgeCurationRenamedOriginal"
@@ -30,15 +30,34 @@ for centerbias_key, centerbias_type in centerbias_modes.items():
             try:
                 image = Image.open(image_path).convert("RGB")
                 print(f"▶ Processing {filename}...")
-                process_image_with_deepgaze_batch(
-                    image=image,
-                    num_points=4,
-                    batch_size=1,
-                    total_iterations=10,
-                    centerbias_type=centerbias_type,
-                    original_image_path=image_path,
-                    npz_output_dir=output_dir 
-                )
+
+                batch = {
+                    "image_original": [image]
+                }
+
+                # process_image_with_deepgaze_batch(
+                #     image=image,
+                #     num_points=4,
+                #     batch_size=1,
+                #     total_iterations=10,
+                #     centerbias_type=centerbias_type,
+                #     original_image_path=image_path,
+                #     npz_output_dir=output_dir 
+                # )
+                params = {
+                    "num_points": 4,
+                    "batch_random_size": 1,
+                    "total_iterations": 10,
+                    "centerbias": centerbias_type,
+                    "feature_method": "mean",
+                    "npz_output_dir": output_dir,
+                    "image_paths": [image_path],
+                }
+
+                result = deepgaze_process(batch, input_key="image_original", output_key="deepgaze_feature", params=params)
+
+                save_path = os.path.join(output_dir, f"{os.path.splitext(filename)[0]}_colormap.jpg")
+                result["deepgaze_feature"][0].save(save_path)
 
             except Exception as e:
                 print(f"❌ Error processing {filename}: {e}")
