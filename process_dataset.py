@@ -42,7 +42,13 @@ else:
     dataset_size = None
 
 # 1️⃣ **读取种子数据库**
-dataset = load_dataset("json", data_files=args.dataset_path, split="train")
+# dataset = load_dataset("json", data_files=args.dataset_path, split="train")
+print(f"🌐 Loading HuggingFace dataset: {args.dataset_path}")
+dataset = load_dataset(args.dataset_path, split="train", keep_in_memory=True)
+
+if "key" not in dataset.column_names:
+    raise ValueError("❌ Dataset missing 'key' field. Please ensure your Hugging Face dataset includes a 'key' column.")
+
 
 # **如果首次运行，计算数据集大小**
 if not dataset_size:
@@ -66,12 +72,12 @@ if args.resume and start_chunk_idx > 0:
 
 # 2️⃣ **处理 pipeline**
 processors = [
-    {"function": load_image, "input": "image_path", "output": "image_original", "params": {"num_proc": 4}},
+    {"function": load_image, "input": "local_url", "output": "image_original", "params": {"num_proc": 4}},
     {"function": resize_image, "input": "image_original", "output": "image_resized", "params": {"num_proc": 4, "max_dims": (1024, 768)}},
     {"function": generate_caption, "input": "image_resized", "output": "caption", "params": {"num_proc": 1}},
-    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "mean", "npz_output_dir": "diff_output/npz_heatmaps"}},
-    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature_softor", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "softor", "npz_output_dir": "diff_output/npz_heatmaps"}},
-    {"function": deepgaze_process, "input": "image_original", "output": "deepgaze_feature_weighted_softmax", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 10, "centerbias": "zeros", "feature_method": "weighted_softmax", "npz_output_dir": "diff_output/npz_heatmaps"}},
+    {"function": deepgaze_process, "input": "image_resized", "output": "deepgaze_feature_mean", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 4, "centerbias": "zeros", "feature_method": "mean", "npz_output_dir": "diff_output/npz_heatmaps"}},
+    {"function": deepgaze_process, "input": "image_resized", "output": "deepgaze_feature_softor", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 4, "centerbias": "zeros", "feature_method": "softor", "npz_output_dir": "diff_output/npz_heatmaps"}},
+    {"function": deepgaze_process, "input": "image_resized", "output": "deepgaze_feature_weighted_softmax", "params": {"num_proc": 1, "num_points": 4, "batch_random_size": 1, "total_iterations": 4, "centerbias": "zeros", "feature_method": "weighted_softmax", "npz_output_dir": "diff_output/npz_heatmaps"}}
 ]
 
 # 3️⃣ **批量处理数据**

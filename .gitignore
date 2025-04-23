@@ -1,6 +1,9 @@
-# 忽略 processed_dataset 文件夹
+# 忽略上传文件夹
 processed_dataset/
 dataset/
+diff_output/
+parquet_chunks/
+parquet_chunks_combined/
 
 # 忽略所有根目录和子目录中的 __pycache__ 文件夹
 **/__pycache__/
